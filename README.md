@@ -1,4 +1,6 @@
-Tampermonkey: Microsoft edge:
+Tampermonkey:
+
+Microsoft edge:
 https://microsoftedge.microsoft.com/addons/detail/iikmkjmpaadaobahmlepeloendndfphd
 
 Google Chrome:
