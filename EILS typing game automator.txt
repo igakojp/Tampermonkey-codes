@@ -1,0 +1,221 @@
+// ==UserScript==
+// @name         Ultra Fast Silent Typer
+// @namespace    http://tampermonkey.net/
+// @version      2025-12-05
+// @description  Fastest silent typing automation, no restart logic
+// @author       You
+// @match        https://matsuyamakitahs-ehimepref-232.s.eils.esnet.ed.jp/*
+// @icon         https://matsuyamakitahs-ehimepref-232.s.eils.esnet.ed.jp/
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+        const originalSetInterval = window.setInterval;
+    const intervals = [];
+
+    window.setInterval = new Proxy(originalSetInterval, {
+        apply(target, thisArg, args) {
+
+            // --- MODIFY THIS TO CONTROL THE PAGE INTERVALS ---
+
+            // Example 1: Slow all intervals x10
+            // args[1] = args[1] * 10;
+
+            // Example 2: Freeze all intervals (they never run)
+            // return -1;
+
+            // Example 3: Replace a specific 100 ms timer with 1000ms
+            if (args[1] === 100) args[1] = 1000;
+
+            // --- END MODIFICATION ZONE ---
+
+            const id = Reflect.apply(target, thisArg, args);
+            intervals.push({ id, args });
+            return id;
+        }
+    });
+
+    // Optional debugging: press F12 → console
+    console.log("[Tampermonkey] Interval override active.");
+
+
+    // ==========================================================
+    // URL CHECKING SYSTEM
+    // ==========================================================
+    const REQUIRED_URL = "https://matsuyamakitahs-ehimepref-232.s.eils.esnet.ed.jp/#/student/kentei/";
+    let mainScriptRunning = false;
+    let stopAllFunctions = false;
+
+    function urlMatches() {
+        return location.href.startsWith(REQUIRED_URL);
+    }
+
+    function waitForCorrectURL(callback) {
+        if (urlMatches()) {
+            if (!mainScriptRunning) {
+                console.log("Correct URL detected → starting script.");
+                mainScriptRunning = true;
+                stopAllFunctions = false;
+                callback();
+            }
+        } else {
+            if (mainScriptRunning) {
+                console.log("URL changed → stopping script.");
+                stopAllFunctions = true;
+                mainScriptRunning = false;
+            }
+        }
+        setTimeout(() => waitForCorrectURL(callback), 1000);
+    }
+
+    // ==========================================================
+    // SILENT KEY SIMULATION
+    // ==========================================================
+    function simulateKey(target, char) {
+        if (stopAllFunctions || !target) return;
+
+        if (document.activeElement !== target) {
+            target.focus();
+        }
+
+        ["keydown", "keyup"].forEach(type => {
+            target.dispatchEvent(new KeyboardEvent(type, {
+                key: char,
+                code: char.length === 1 ? "Key" + char.toUpperCase() : undefined,
+                bubbles: true,
+                cancelable: true
+            }));
+        });
+    }
+
+    function simulateSpace() {
+        if (stopAllFunctions) return;
+
+        const target = document.querySelector(".border-secondary") || document.querySelector(".typing-container") || document.body;
+        if (document.activeElement !== target) {
+            target.focus();
+        }
+
+        ["keydown", "keyup"].forEach(type => {
+            target.dispatchEvent(new KeyboardEvent(type, {
+                key: " ",
+                code: "Space",
+                bubbles: true,
+                cancelable: true
+            }));
+        });
+
+        console.log("Simulated SPACE key (silent)");
+    }
+
+    // ==========================================================
+    // PRESS SPACE AFTER FOCUSING .border-secondary
+    // ==========================================================
+    function pressSpace() {
+        if (stopAllFunctions) return;
+
+        const focusTarget = document.querySelector(".border-secondary");
+        if (focusTarget) {
+            focusTarget.tabIndex = -1;
+            focusTarget.focus();
+            console.log("Focused .border-secondary");
+        } else {
+            document.body.tabIndex = -1;
+            document.body.focus();
+            console.log("WARNING: .border-secondary not found → focusing body");
+        }
+
+        simulateSpace();
+    }
+
+    // ==========================================================
+    // MAIN TYPING SYSTEM - MAX SPEED, SILENT
+    // ==========================================================
+    function startTypingSystem() {
+        if (stopAllFunctions) return;
+
+        console.log("=== NEW ROUND STARTED ===");
+
+        pressSpace();
+
+        let typingStopped = false;
+        let waitingAfterOneSecond = false;
+
+        // Detect stop condition "残り 1 秒"
+        function checkStopCondition() {
+            if (stopAllFunctions || typingStopped) return;
+
+            const stopEl = document.querySelector(".mx-5");
+            if (stopEl) {
+                const text = stopEl.textContent.trim().replace(/\s+/g, " ");
+                if (!waitingAfterOneSecond && text === "残り 1 秒") {
+                    waitingAfterOneSecond = true;
+                    console.log("1 second left → waiting 1 sec...");
+
+                    setTimeout(() => {
+                        if (stopAllFunctions) return;
+                        typingStopped = true;
+                        console.log("Typing stopped for 1 second remaining...");
+                        // No restart button logic
+                    }, 1000);
+                }
+            }
+
+            requestAnimationFrame(checkStopCondition);
+        }
+
+        checkStopCondition();
+
+        // Typing loop - MAX SPEED
+        function typingLoop() {
+            if (stopAllFunctions || typingStopped) return;
+
+            const target = document.querySelector(".typing-container") || document.querySelector(".border-secondary") || document.body;
+            const text = target.textContent.trim();
+
+            for (const char of text) {
+                if (stopAllFunctions || typingStopped) return;
+                simulateKey(target, char);
+            }
+
+            requestAnimationFrame(typingLoop);
+        }
+
+        typingLoop();
+    }
+
+    // ==========================================================
+    // WAIT FOR FOCUS ELEMENT (.border-secondary)
+    // ==========================================================
+    function waitForFocusElement() {
+        if (stopAllFunctions) return;
+
+        function checkFocusElement() {
+            if (stopAllFunctions) return;
+
+            const focusTarget = document.querySelector(".border-secondary");
+            if (focusTarget) {
+                console.log(".border-secondary loaded → starting typing in 0.5s");
+                setTimeout(() => {
+                    if (stopAllFunctions) return;
+                    startTypingSystem();
+                }, 500);
+                return;
+            }
+
+            requestAnimationFrame(checkFocusElement);
+        }
+
+        checkFocusElement();
+    }
+
+    // ==========================================================
+    // START SYSTEM
+    // ==========================================================
+    waitForCorrectURL(() => {
+        waitForFocusElement();
+    });
+
+})();
